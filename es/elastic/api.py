@@ -1,4 +1,5 @@
 import re
+import requests
 from typing import Any, Dict, List, Optional, Tuple
 
 from elasticsearch import Elasticsearch, exceptions as es_exceptions
@@ -137,20 +138,33 @@ class Cursor(BaseCursor):
             return cursor
 
         re_table_name = re.match("SHOW ARRAY_COLUMNS FROM (.*)", operation)
+        open('/mnt/e/INCEPTION/superset/log.log', 'a').write('QUERY: |' + str(operation) + '|\n')
         if re_table_name:
             return self.get_array_type_columns(re_table_name[1])
 
         query = apply_parameters(operation, parameters)
-        results = self.elastic_query(query)
+        query = self.sanitize_query(query)
+        open('/mnt/e/INCEPTION/superset/log.log', 'a').write('EXECUTE QUERY: |' + str(query) + '|\n')
+        # results = self.elastic_query(query)
         # We need a list of tuples
-        rows = [tuple(row) for row in results.get("rows", [])]
-        columns = results.get("columns")
-        if not columns:
-            raise exceptions.DataError(
-                "Missing columns field, maybe it's an opendistro sql ep"
-            )
-        self._results = rows
-        self.description = get_description_from_columns(columns)
+        # rows = [tuple(row) for row in results.get("rows", [])]
+        # columns = results.get("columns")
+
+        res = requests.get('http://192.168.0.225:8000/', params={'query' : query, 'token' : open('/mnt/e/INCEPTION/superset/elasticsearch-dbapi/token.tkn').read().strip()}).json()
+        open('/mnt/e/INCEPTION/superset/widget-log.log', 'a').write('WIDGET QUERY: |' + str(query) + '|\n')
+        open('/mnt/e/INCEPTION/superset/widget-log.log', 'a').write('WIDGET RESULT: |' + str(res) + '|\n')
+        # open('/mnt/e/INCEPTION/superset/log.log', 'a').write('>>>>| E_RESULT ROWS: |' + str(rows).replace('\n', '; ') + '|\n')
+        # open('/mnt/e/INCEPTION/superset/log.log', 'a').write('>>>>| E_RESULT COLS: |' + str(columns).replace('\n', '; ') + '|\n')
+        # if not columns:
+        #     raise exceptions.DataError(
+        #         "Missing columns field, maybe it's an opendistro sql ep"
+        #     )
+
+        self._results = res['rows']
+        self.description = get_description_from_columns(res['cols'])
+        # self._results = rows
+        # self.description = get_description_from_columns(columns)
+        open('/mnt/e/INCEPTION/superset/log.log', 'a').write('>>>>| E_RESULT DESC: |' + str(self.description).replace('\n', '; ') + '|\n')
         return self
 
     def get_array_type_columns(self, table_name: str) -> "Cursor":
